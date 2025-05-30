@@ -53,7 +53,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
             filename = data['url'] if stream else ytdl.prepare_filename(data)
             return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
         except Exception as e:
-            print(f"Chyba pri sťahovaní: {e}")
+            error_msg = str(e).lower()
+            if 'drm' in error_msg:
+                print(f"[WARNING] DRM chraneny obsah: {url}")
+            elif 'private' in error_msg or 'unavailable' in error_msg:
+                print(f"[WARNING] Video nie je dostupne: {url}")
+            elif 'age' in error_msg:
+                print(f"[WARNING] Age-restricted video: {url}")
+            else:
+                print(f"[ERROR] Chyba pri stahovani: {e}")
             return None
 
 async def play_next(guild_id, client, bot_stats):
@@ -94,10 +102,24 @@ async def play_next(guild_id, client, bot_stats):
             embed.add_field(name="📊 Vo fronte", value=str(len(music_queue[guild_id])), inline=True)
             await channel.send(embed=embed)
         else:
-            await channel.send("❌ Nepodarilo sa načítať pesničku!")
+            error_msg = "Nepodarilo sa nacitat pesnicku!"
+            if "DRM" in str(e):
+                error_msg = "Video je DRM chranene a nepodporuje sa!"
+            elif "private" in str(e).lower():
+                error_msg = "Video je sukromne alebo zmazane!"
+            elif "age" in str(e).lower():
+                error_msg = "Video ma vekove obmedzenie!"
+
+            await channel.send(f"[ERROR] {error_msg}")
             await play_next(guild_id, client, bot_stats)
     except Exception as e:
-        await channel.send(f"❌ Chyba pri prehrávaní: {str(e)}")
+        error_msg = f"Chyba pri prehravani: {str(e)}"
+        if "DRM" in str(e):
+            error_msg = "Video je DRM chranene - skusaj iny link!"
+        elif "private" in str(e).lower():
+            error_msg = "Video nie je dostupne - skusaj iny link!"
+
+        await channel.send(f"[ERROR] {error_msg}")
         await play_next(guild_id, client, bot_stats)
 
 async def handle_join_command(message, aktualizuj_statistiky):
