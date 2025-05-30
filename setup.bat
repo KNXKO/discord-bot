@@ -1,33 +1,33 @@
 @echo off
 echo ====================================
-echo    KNX Discord Bot Setup s YouTube
+echo    KNX Discord Bot Setup s YouTube + Spotify
 echo ====================================
 echo.
 
-echo 1. Inštalujem Python knižnice...
+echo 1. Inštalujem/Aktualizujem Python knižnice...
 echo.
 
 REM Skúša rôzne spôsoby spustenia Python
 echo Skúšam 'py -m pip'...
-py -m pip install discord.py flask python-dotenv yt-dlp PyNaCl ffmpeg-python requests
+py -m pip install -r requirements.txt --upgrade
 if %errorlevel%==0 (
-    echo ✅ Úspešne nainštalované cez 'py'!
+    echo ✅ Úspešne nainštalované/aktualizované cez 'py'!
     goto :ffmpeg_check
 )
 
 echo.
 echo Skúšam 'python -m pip'...
-python -m pip install discord.py flask python-dotenv yt-dlp PyNaCl ffmpeg-python requests
+python -m pip install -r requirements.txt --upgrade
 if %errorlevel%==0 (
-    echo ✅ Úspešne nainštalované cez 'python'!
+    echo ✅ Úspešne nainštalované/aktualizované cez 'python'!
     goto :ffmpeg_check
 )
 
 echo.
 echo Skúšam 'python3 -m pip'...
-python3 -m pip install discord.py flask python-dotenv yt-dlp PyNaCl ffmpeg-python requests
+python3 -m pip install -r requirements.txt --upgrade
 if %errorlevel%==0 (
-    echo ✅ Úspešne nainštalované cez 'python3'!
+    echo ✅ Úspešne nainštalované/aktualizované cez 'python3'!
     goto :ffmpeg_check
 )
 
@@ -83,29 +83,51 @@ if %errorlevel%==0 (
     echo ⚠️ Problém s yt-dlp knižnicou
 )
 
+py -c "import spotipy; print('Spotipy: OK')" 2>nul || python -c "import spotipy; print('Spotipy: OK')" 2>nul || python3 -c "import spotipy; print('Spotipy: OK')"
+if %errorlevel%==0 (
+    echo ✅ Spotipy je nainštalované správne!
+) else (
+    echo ⚠️ Problém so Spotipy knižnicou
+)
+
 echo.
 echo 4. Kontrola .env súboru...
 if exist ".env" (
     echo ✅ .env súbor existuje
+
+    findstr /C:"DISCORD_TOKEN=" .env >nul
+    if %errorlevel%==0 (
+        echo ✅ Discord token nastavený
+    ) else (
+        echo ⚠️ Discord token chýba v .env
+    )
+
+    findstr /C:"SPOTIFY_CLIENT_ID=" .env >nul
+    if %errorlevel%==0 (
+        echo ✅ Spotify Client ID nastavené
+    ) else (
+        echo ⚠️ Spotify Client ID chýba v .env
+    )
+
+    findstr /C:"SPOTIFY_CLIENT_SECRET=" .env >nul
+    if %errorlevel%==0 (
+        echo ✅ Spotify Client Secret nastavené
+    ) else (
+        echo ⚠️ Spotify Client Secret chýba v .env
+    )
 ) else (
     echo ⚠️ .env súbor neexistuje!
-    echo 📝 Vytvor .env súbor s DISCORD_TOKEN=tvoj_token
+    echo.
+    echo 📝 Vytvor .env súbor s:
+    echo DISCORD_TOKEN=tvoj_discord_token
+    echo SPOTIFY_CLIENT_ID=tvoj_spotify_client_id
+    echo SPOTIFY_CLIENT_SECRET=tvoj_spotify_client_secret
 )
 
 echo.
 echo ====================================
 echo          HOTOVO!
 echo ====================================
-echo.
-echo 🚀 Spusť bota pomocou: auto_start.bat
-echo 🎵 Nové hudobné príkazy:
-echo    !play [URL] - prehrá YouTube video
-echo    !skip - preskočí pesničku
-echo    !stop - zastaví prehrávanie
-echo    !queue - zobrazí frontu
-echo    !volume [0-100] - nastaví hlasitosť
-echo    !join - pripojí sa k hlasovému kanálu
-echo    !leave - odpojí sa z hlasového kanálu
 
 :end
 echo.
