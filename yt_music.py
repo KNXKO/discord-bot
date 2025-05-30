@@ -326,7 +326,6 @@ async def handle_voice_state_update(member, before, after):
             guild_id = member.guild.id
             cleanup_guild_music_data(guild_id)
             await voice_client.disconnect()
-            print(f"Bot sa automaticky odpojil zo servera {member.guild.name} - zostal sám v kanáli")
 
 def get_music_help_text():
-    return "`!play [URL]`, `!pause`, `!resume`, `!skip`, `!stop`, `!queue`, `!volume [0-100]`, `!join`, `!leave`"
+    return "`!play [URL]`, `!pause/resume`, `!skip`, `!volume [0-100]`, `!queue`, `!stop`, `!join/leave`"
