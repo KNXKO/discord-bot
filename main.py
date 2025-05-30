@@ -114,22 +114,21 @@ async def poslat_offline_spravu():
                 return
 
         embed = discord.Embed(
-            title="🔴 KNX's Bot je OFFLINE!",
-            description=f"KNX Discord Bot sa odpojil.\n⏰ {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
+            title="🔴  KNX's Bot je OFFLINE!",
+            description=f"KNX's Bot sa odpojil.\n⏰  {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
             color=0xff0000
         )
         await kanal.send(embed=embed)
-        print("Offline správa odoslaná")
     except Exception as e:
         print(f"Chyba: {e}")
 
 @client.event
 async def on_disconnect():
-    print("Bot sa odpojil od Discordu!")
+    print("KNX's Bot sa odpojil!")
     await poslat_offline_spravu()
 
 def signal_handler(sig, frame):
-    print('\nBot sa vypína...')
+    print("\nKNX's Bot sa vypína...")
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -142,7 +141,6 @@ signal.signal(signal.SIGINT, signal_handler)
 
 @client.event
 async def on_ready():
-    """Event keď sa bot úspešne pripojí"""
     await client.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
@@ -150,7 +148,7 @@ async def on_ready():
         )
     )
     nacitaj_hlasky()
-    print(f"🥶 KNX's Bot je online ako {client.user}")
+    print(f"KNX's Bot je online!")
 
 @client.event
 async def on_message(message):
@@ -163,17 +161,14 @@ async def on_message(message):
     if msg.startswith("!help"):
         aktualizuj_statistiky("help")
         embed = discord.Embed(
-            title="🥶 KNX's Bot - Príkazy",
-            description="Tu sú všetky dostupné príkazy pre KNX Discord Bot:",
+            title="🥶  KNX's Bot - Príkazy",
+            description="Dostupné príkazy: ",
             color=0x9932cc
         )
-        embed.add_field(name="🎮 Zábava", value="`!cicina`, `!dirgova`, `!magicka gula`, `!kocky`", inline=False)
-        embed.add_field(name="🎵 Hudba", value=yt_music.get_music_help_text(), inline=False)
-        embed.add_field(name="💾 Pamäť", value="`!uloz [text]`, `!hlasky`, `!najdi [slovo]`, `!posledne [počet]`", inline=False)
-        embed.add_field(name="🛠️ Moderácia", value="`!clean [počet]`", inline=False)
-        embed.add_field(name="📊 Ostatné", value="`!stats`, `!restart`", inline=False)
-        embed.set_footer(text="Vytvoril: KNX 🥶")
-        await message.channel.send(embed=embed)
+        embed.add_field(name="🎮  Zábava", value="`!cicina`, `!dirgova`, `!magicka gula`, `!kocky`", inline=False)
+        embed.add_field(name="🎵  Hudba", value=yt_music.get_music_help_text(), inline=False)
+        embed.add_field(name="💾  Pamäť", value="`!uloz [text]`, `!hlasky`, `!najdi [slovo]`, `!posledne [počet]`", inline=False)
+        embed.add_field(name="📊  Ostatné", value="`!stats`, `!restart`, `!clean`", inline=False)
 
     # HUDOBNÉ PRÍKAZY - delegované do music modulu
     elif msg.startswith("!join"):
@@ -414,7 +409,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
 
     # ADMIN PRÍKAZY
-    elif msg.startswith("!restart"):
+    elif msg.startswith("!rr"):
         aktualizuj_statistiky("restart")
         if not message.author.guild_permissions.administrator:
             embed = discord.Embed(
@@ -447,10 +442,10 @@ print("\nSpúštam KNX's Bot...")
 try:
     client.run(os.getenv('DISCORD_TOKEN'))
 except KeyboardInterrupt:
-    print("\nKNX's Bot bol vypnutý používateľom!")
+    print("\nKNX's Bot bol manuálne vypnutý.")
     sys.exit(2)
 except Exception as e:
     print(f"Chyba pri spúšťaní KNX's Bot: {e}")
     sys.exit(2)
 finally:
-    print("KNX's Bot ukončený")
+    print("KNX's Bot ukončený.")
