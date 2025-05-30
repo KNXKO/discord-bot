@@ -1,0 +1,6 @@
+discord.py>=2.0.0
+flask
+python-dotenv
+yt-dlp
+PyNaCl
+ffmpeg-python
