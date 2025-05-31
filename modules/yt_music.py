@@ -2,7 +2,6 @@ import discord
 import asyncio
 import yt_dlp
 from datetime import datetime
-from . import spotify
 
 # Slovníky na ukladanie stavu hudby pre každý server
 music_queue = {}
@@ -65,7 +64,6 @@ class YTDLSource(discord.PCMVolumeTransformer):
             return None
 
 async def play_next(guild_id, client, bot_stats):
-    """Prehrá nasledujúcu pesničku z fronty"""
     if guild_id not in music_queue or not music_queue[guild_id]:
         return
 
@@ -123,7 +121,6 @@ async def play_next(guild_id, client, bot_stats):
         await play_next(guild_id, client, bot_stats)
 
 async def handle_join_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !join"""
     aktualizuj_statistiky("join")
     mention = message.author.mention
 
@@ -135,7 +132,6 @@ async def handle_join_command(message, aktualizuj_statistiky):
             await voice_channel.connect()
 
 async def handle_leave_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !leave"""
     aktualizuj_statistiky("leave")
     mention = message.author.mention
 
@@ -145,7 +141,6 @@ async def handle_leave_command(message, aktualizuj_statistiky):
         await message.guild.voice_client.disconnect()
 
 async def handle_play_command(message, aktualizuj_statistiky, client, bot_stats):
-    """Spracuje príkaz !play"""
     aktualizuj_statistiky("play")
     mention = message.author.mention
     parts = message.content.split(" ", 1)
@@ -184,7 +179,6 @@ async def handle_play_command(message, aktualizuj_statistiky, client, bot_stats)
         await play_next(guild_id, client, bot_stats)
 
 async def handle_pause_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !pause"""
     aktualizuj_statistiky("pause")
     mention = message.author.mention
     guild_id = message.guild.id
@@ -208,7 +202,6 @@ async def handle_pause_command(message, aktualizuj_statistiky):
         await message.channel.send(f"{mention} ❌ Hudba je už pozastavená! Použi `!resume`")
 
 async def handle_resume_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !resume"""
     aktualizuj_statistiky("resume")
     mention = message.author.mention
     guild_id = message.guild.id
@@ -222,26 +215,13 @@ async def handle_resume_command(message, aktualizuj_statistiky):
         if guild_id in current_players and current_players[guild_id]:
             current_song = current_players[guild_id].title
 
-        embed = discord.Embed(
-            title="▶️ Hudba pokračuje",
-            description=f"**{current_song}**",
-            color=0x9b59b6
-        )
-        await message.channel.send(embed=embed)
-    elif message.guild.voice_client and message.guild.voice_client.is_playing():
-        await message.channel.send(f"{mention} ❌ Hudba už hrá! Použi `!pause` na pozastavenie")
-
 async def handle_skip_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !skip"""
     aktualizuj_statistiky("skip")
-    mention = message.author.mention
 
     if message.guild.voice_client and (message.guild.voice_client.is_playing() or message.guild.voice_client.is_paused()):
         message.guild.voice_client.stop()
-        await message.channel.send("⏭️ Pesnička preskočená!")
 
 async def handle_stop_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !stop"""
     aktualizuj_statistiky("stop")
     mention = message.author.mention
     guild_id = message.guild.id
@@ -252,7 +232,6 @@ async def handle_stop_command(message, aktualizuj_statistiky):
         await message.channel.send("⏹️ Prehrávanie zastavené a fronta vyčistená!")
 
 async def handle_queue_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !queue"""
     aktualizuj_statistiky("queue")
     guild_id = message.guild.id
 
@@ -310,7 +289,6 @@ async def handle_queue_command(message, aktualizuj_statistiky):
     await message.channel.send(embed=embed)
 
 async def handle_volume_command(message, aktualizuj_statistiky):
-    """Spracuje príkaz !volume"""
     aktualizuj_statistiky("volume")
     mention = message.author.mention
     parts = message.content.split(" ", 1)
@@ -341,7 +319,6 @@ async def handle_volume_command(message, aktualizuj_statistiky):
         await message.channel.send(f"{mention} ❌ Neplatné číslo! Použi číslo od 0 do 100.")
 
 def cleanup_guild_music_data(guild_id):
-    """Vyčistí hudobné dáta pre server"""
     if guild_id in music_queue:
         music_queue[guild_id].clear()
     if guild_id in current_players:
@@ -350,7 +327,6 @@ def cleanup_guild_music_data(guild_id):
         del paused_state[guild_id]
 
 async def handle_voice_state_update(member, before, after):
-    """Spracuje zmenu hlasového stavu používateľa"""
     if member.bot:
         return
 
@@ -366,5 +342,4 @@ async def handle_voice_state_update(member, before, after):
             await voice_client.disconnect()
 
 def get_music_help_text():
-    """Vráti text s hudobnými príkazmi pre help"""
     return "`!play [URL]`, `!pause/resume`, `!skip`, `!volume [0-100]`, `!queue`, `!stop`, `!join/leave`"

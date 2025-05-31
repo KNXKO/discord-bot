@@ -26,7 +26,6 @@ bot_stats = {
 }
 
 def aktualizuj_statistiky(prikaz):
-    """Aktualizuje štatistiky použitých príkazov"""
     bot_stats["prikazy_pouzite"] += 1
     if prikaz in bot_stats["najcastejsi_prikaz"]:
         bot_stats["najcastejsi_prikaz"][prikaz] += 1
@@ -34,7 +33,6 @@ def aktualizuj_statistiky(prikaz):
         bot_stats["najcastejsi_prikaz"][prikaz] = 1
 
 async def poslat_offline_spravu():
-    """Pošle správu o odpojení bota"""
     try:
         kanal = client.get_channel(1375790882749419560)
         if not kanal:
@@ -56,12 +54,10 @@ async def poslat_offline_spravu():
 
 @client.event
 async def on_disconnect():
-    """Event pri odpojení bota"""
     print("KNX's Bot sa odpojil!")
     await poslat_offline_spravu()
 
 def signal_handler(sig, frame):
-    """Spracuje signál na ukončenie"""
     print("\nKNX's Bot sa vypína...")
     try:
         loop = asyncio.get_event_loop()
@@ -87,7 +83,6 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    """Spracovanie všetkých správ"""
     if message.author == client.user:
         return
 
@@ -217,7 +212,6 @@ async def on_message(message):
 
 @client.event
 async def on_voice_state_update(member, before, after):
-    """Event pri zmene hlasového stavu"""
     await yt_music.handle_voice_state_update(member, before, after)
 
 print("\nSpúštam KNX's Bot...")
