@@ -26,15 +26,43 @@ ytdl_format_options = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'extract_flat': False,
+    # Špeciálne nastavenia pre live streamy
+    'live_from_start': False,  # Nezačína od začiatku live streamu
+    'hls_prefer_native': True,  # Použije natívny HLS decoder
 }
 
-# Nastavenia pre FFmpeg
+# Špeciálne yt-dlp nastavenia len pre live streamy
+ytdl_live_format_options = {
+    'format': 'best[ext=m4a]/bestaudio[ext=m4a]/best/bestaudio',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0',
+    'extract_flat': False,
+    'live_from_start': False,  # Dôležité - začne od aktuálneho času
+    'hls_prefer_native': True,
+}
+
+# Nastavenia pre FFmpeg - štandardné
 ffmpeg_options = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
 }
 
+# Nastavenia pre FFmpeg - live streamy
+ffmpeg_live_options = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -fflags +discardcorrupt -analyzeduration 0 -probesize 32',
+    'options': '-vn -f s16le -ar 48000 -ac 2'
+}
+
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+ytdl_live = yt_dlp.YoutubeDL(ytdl_live_format_options)
 
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
@@ -43,16 +71,32 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.title = data.get('title')
         self.url = data.get('url')
         self.duration = data.get('duration')
+        self.is_live = data.get('is_live', False)
+
+        # Označí live streamy v názve
+        if self.is_live:
+            self.title = f"🔴 LIVE: {self.title}"
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
         try:
-            # Extraktuje informácie o videu
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+            # Najprv skúsi získať základné info pre detekciu live streamu
+            print(f"[DEBUG] 🔍 Detekujem typ obsahu pre: {url}")
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
 
             if 'entries' in data:
                 data = data['entries'][0]
+
+            # Detekuje live stream
+            is_live = data.get('is_live', False)
+
+            if is_live:
+                print(f"[DEBUG] 🔴 Live stream detekovaný, používam špeciálne nastavenia")
+                # Pre live streamy používa špecializované nastavenia
+                data = await loop.run_in_executor(None, lambda: ytdl_live.extract_info(url, download=False))
+                if 'entries' in data:
+                    data = data['entries'][0]
 
             filename = data['url'] if stream else ytdl.prepare_filename(data)
 
@@ -61,7 +105,20 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 print(f"[ERROR] Nepodarilo sa získať stream URL pre: {url}")
                 return None
 
-            return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+            # Detekuje live stream
+            is_live = data.get('is_live', False)
+
+            if is_live:
+                print(f"[DEBUG] 🔴 Vytváram LIVE stream player: {data.get('title')}")
+                # Používa špeciálne live FFmpeg nastavenia
+                source = discord.FFmpegPCMAudio(filename, **ffmpeg_live_options)
+            else:
+                print(f"[DEBUG] 🎵 Vytváram štandardný player: {data.get('title')}")
+                # Používa štandardné FFmpeg nastavenia
+                source = discord.FFmpegPCMAudio(filename, **ffmpeg_options)
+
+            return cls(source, data=data)
+
         except Exception as e:
             error_msg = str(e).lower()
             if 'drm' in error_msg:
@@ -70,6 +127,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 print(f"[WARNING] Video nie je dostupné: {url}")
             elif 'age' in error_msg:
                 print(f"[WARNING] Age-restricted video: {url}")
+            elif 'live' in error_msg:
+                print(f"[WARNING] Live stream problém: {url}")
             else:
                 print(f"[ERROR] Chyba pri sťahovaní: {e}")
             return None
@@ -189,12 +248,21 @@ async def replay_current_song(guild_id, client, bot_stats):
         return
 
     current_song_data = current_players[guild_id]
+
+    # Skontroluje či je to live stream - live streamy sa nemôžu loopoovať
+    if current_song_data.is_live:
+        print(f"[DEBUG] 🔴 Live stream sa nemôže loopoovať - pokračujem ďalej")
+        loop_state[guild_id] = False
+        loop_counter[guild_id] = 0
+        await play_next(guild_id, client, bot_stats)
+        return
+
     # Použije pôvodnú hľadaciu frázu namiesto URL, aby získal fresh stream
     original_url = current_song_data.data.get('webpage_url', current_song_data.data.get('original_url'))
 
     # Ak nemáme webpage_url, použijeme title ako search query
     if not original_url or not original_url.startswith('http'):
-        search_query = current_song_data.title
+        search_query = current_song_data.title.replace("🔴 LIVE: ", "")  # Odstráni live prefix
         print(f"[DEBUG] 🔍 Používam title ako search query: {search_query}")
     else:
         search_query = original_url
@@ -206,10 +274,20 @@ async def replay_current_song(guild_id, client, bot_stats):
         # Získa fresh data z yt-dlp
         print(f"[DEBUG] 🔄 Získavam fresh stream pre loop...")
         loop_event = asyncio.get_event_loop()
+
+        # Najprv detekuje typ obsahu
         data = await loop_event.run_in_executor(None, lambda: ytdl.extract_info(search_query, download=False))
 
         if 'entries' in data:
             data = data['entries'][0]
+
+        # Ak je to live stream, použije špecializované nastavenia
+        is_live = data.get('is_live', False)
+        if is_live:
+            print(f"[DEBUG] 🔴 Live stream pre replay - používam live ytdl")
+            data = await loop_event.run_in_executor(None, lambda: ytdl_live.extract_info(search_query, download=False))
+            if 'entries' in data:
+                data = data['entries'][0]
 
         # Vytvorí nový player s fresh stream URL
         fresh_stream_url = data.get('url')
@@ -221,13 +299,26 @@ async def replay_current_song(guild_id, client, bot_stats):
             return
 
         print(f"[DEBUG] 🎵 Získaný fresh stream, vytváram player...")
-        player = discord.FFmpegPCMAudio(fresh_stream_url, **ffmpeg_options)
+
+        # Detekuje či je to live stream
+        is_live = data.get('is_live', False)
+
+        if is_live:
+            print(f"[DEBUG] 🔴 Fresh live stream - používam live options")
+            player = discord.FFmpegPCMAudio(fresh_stream_url, **ffmpeg_live_options)
+        else:
+            player = discord.FFmpegPCMAudio(fresh_stream_url, **ffmpeg_options)
 
         # Vytvorí YTDLSource wrapper
         volume_player = discord.PCMVolumeTransformer(player, volume=0.5)
         volume_player.title = data.get('title', current_song_data.title)
         volume_player.data = data
         volume_player.duration = data.get('duration')
+        volume_player.is_live = is_live
+
+        # Označí live streamy v názve
+        if volume_player.is_live:
+            volume_player.title = f"🔴 LIVE: {volume_player.title}"
 
         # Aktualizuje current player
         current_players[guild_id] = volume_player
@@ -356,7 +447,11 @@ async def play_next(guild_id, client, bot_stats):
                     color=0x9932cc
                 )
 
-                if player.duration:
+                # Pre live streamy zobrazí live status namiesto dĺžky
+                if hasattr(player, 'is_live') and player.is_live:
+                    embed.add_field(name="🔴 Status", value="LIVE STREAM", inline=True)
+                    embed.color = 0xff0000  # Červená farba pre live
+                elif player.duration:
                     minutes = player.duration // 60
                     seconds = player.duration % 60
                     embed.add_field(name="⏱️ Dĺžka", value=f"{minutes}:{seconds:02d}", inline=True)
@@ -366,12 +461,20 @@ async def play_next(guild_id, client, bot_stats):
                 # Pridá info o loop stavoch
                 loop_info = []
                 if loop_state.get(guild_id, False):
-                    loop_info.append("🔂 Pesnička")
+                    # Pre live streamy upozorní že loop nefunguje
+                    if hasattr(player, 'is_live') and player.is_live:
+                        loop_info.append("🔂 ⚠️ Live")
+                    else:
+                        loop_info.append("🔂 Pesnička")
                 if loop_queue.get(guild_id, False):
                     loop_info.append("🔁 Fronta")
 
                 if loop_info:
                     embed.add_field(name="🔄 Loop", value=" + ".join(loop_info), inline=True)
+
+                # Pridá live stream warning ak je loop zapnutý
+                if hasattr(player, 'is_live') and player.is_live and loop_state.get(guild_id, False):
+                    embed.add_field(name="⚠️ Upozornenie", value="Live streamy sa nemôžu loopoovať!", inline=False)
 
                 if channel:  # Pošle len ak má channel (nie pri queue loop)
                     await channel.send(embed=embed)
@@ -506,6 +609,12 @@ async def handle_play_command(message, aktualizuj_statistiky, client, bot_stats)
             data = data['entries'][0]
 
         track_title = data.get('title', 'Neznáma skladba')
+        is_live = data.get('is_live', False)
+
+        # Označí live streamy v názve
+        if is_live:
+            track_title = f"🔴 LIVE: {track_title}"
+
         # Ak to nie je priama URL, použije nájdenú URL z YouTube vyhľadávania
         final_url = data.get('webpage_url', search_query)
     except Exception as e:
@@ -529,13 +638,16 @@ async def handle_play_command(message, aktualizuj_statistiky, client, bot_stats)
     embed = discord.Embed(
         title="🎵 Pesnička pridaná do fronty",
         description=f"**{track_title}**\nPozícia vo fronte: {position_text}",
-        color=0x9932cc
+        color=0xff0000 if "🔴 LIVE:" in track_title else 0x9932cc
     )
 
     # Pridá info o parametroch
     params = []
     if is_loop:
-        params.append("🔂 Loop zapnutý")
+        if "🔴 LIVE:" in track_title:
+            params.append("🔂⚠️ Loop (nefunguje pre live)")
+        else:
+            params.append("🔂 Loop zapnutý")
     if is_next:
         params.append("⏭️ Pridané na začiatok")
 
@@ -545,6 +657,10 @@ async def handle_play_command(message, aktualizuj_statistiky, client, bot_stats)
     # Pridá info o hľadaní ak to nebola priama URL
     if not search_query.startswith("http"):
         embed.add_field(name="🔍 Hľadaný výraz", value=f"`{search_query}`", inline=False)
+
+    # Pridá live stream info
+    if "🔴 LIVE:" in track_title:
+        embed.add_field(name="🔴 Live Stream", value="Prehrá sa v reálnom čase", inline=False)
 
     await message.channel.send(embed=embed)
 
@@ -742,7 +858,11 @@ async def handle_queue_command(message, aktualizuj_statistiky):
             status_parts.append("▶️ Hrá")
 
         if loop_state.get(guild_id, False):
-            status_parts.append("🔂")
+            # Pre live streamy upozorní že loop nefunguje
+            if hasattr(current_players[guild_id], 'is_live') and current_players[guild_id].is_live:
+                status_parts.append("🔂⚠️")
+            else:
+                status_parts.append("🔂")
 
         status = " ".join(status_parts)
         embed.add_field(
@@ -822,6 +942,13 @@ def cleanup_guild_music_data(guild_id):
     if guild_id in music_queue:
         music_queue[guild_id].clear()
     if guild_id in current_players:
+        # Cleanup live stream player ak existuje
+        player = current_players[guild_id]
+        if hasattr(player, 'cleanup'):
+            try:
+                player.cleanup()
+            except:
+                pass
         del current_players[guild_id]
     if guild_id in paused_state:
         del paused_state[guild_id]
@@ -1055,6 +1182,81 @@ async def handle_permissions_command(message, aktualizuj_statistiky):
 
     await message.channel.send(embed=embed)
 
+async def handle_live_command(message, aktualizuj_statistiky):
+    """Testuje live stream funkcionalitu"""
+    aktualizuj_statistiky("live")
+
+    embed = discord.Embed(
+        title="🔴 Live Stream Test",
+        description="Testujem live stream detekciu...",
+        color=0xff0000
+    )
+    await message.channel.send(embed=embed)
+
+    # Testuje známy live stream (môže byť offline)
+    test_urls = [
+        "https://www.youtube.com/watch?v=jfKfPfyJRdk",  # lofi hip hop radio
+        "https://www.youtube.com/watch?v=5qap5aO4i9A"   # chillhop music
+    ]
+
+    for i, test_url in enumerate(test_urls, 1):
+        try:
+            print(f"[DEBUG] 🔴 Testujem live stream #{i}: {test_url}")
+
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(test_url, download=False))
+
+            if 'entries' in data:
+                data = data['entries'][0]
+
+            title = data.get('title', 'Neznámy')
+            is_live = data.get('is_live', False)
+            duration = data.get('duration', 'N/A')
+
+            status = "🔴 LIVE" if is_live else "📹 Nie je live"
+
+            result_embed = discord.Embed(
+                title=f"Test #{i} - {status}",
+                description=f"**{title}**",
+                color=0x00ff00 if is_live else 0xffa500
+            )
+
+            result_embed.add_field(name="🔗 URL", value=test_url, inline=False)
+            result_embed.add_field(name="⏱️ Dĺžka", value=str(duration) if duration else "N/A", inline=True)
+            result_embed.add_field(name="📡 Live Status", value="Áno" if is_live else "Nie", inline=True)
+
+            await message.channel.send(embed=result_embed)
+
+            if is_live:
+                await message.channel.send(f"✅ **Nájdený live stream!** Skús: `!play {test_url}`")
+                break
+
+        except Exception as e:
+            error_embed = discord.Embed(
+                title=f"❌ Test #{i} zlyhal",
+                description=f"```{str(e)}```",
+                color=0xff0000
+            )
+            await message.channel.send(embed=error_embed)
+
+    # Návod
+    help_embed = discord.Embed(
+        title="💡 Ako používať live streamy",
+        color=0x9932cc
+    )
+    help_embed.add_field(
+        name="🔴 Live stream príkazy",
+        value="• `!play [live_youtube_url]` - prehrá live stream\n• `!live` - testuje live stream detekciu\n• Live streamy majú 🔴 označenie",
+        inline=False
+    )
+    help_embed.add_field(
+        name="⚠️ Obmedzenia",
+        value="• Live streamy sa **nemôžu loopoovať**\n• Môžu sa občas prerušiť\n• Závisia od stability streamu",
+        inline=False
+    )
+
+    await message.channel.send(embed=help_embed)
+
 def get_music_help_text():
     """Vráti text nápovedy pre hudobné príkazy"""
-    return "`!play [URL]`, `!loop`, `!pause/resume`, `!skip`, `!volume [0-100]`, `!queue`, `!stop`, `!join/leave`"
+    return "`!play [URL]`, `!loop`, `!pause/resume`, `!skip`, `!volume [0-100]`, `!queue`, `!stop`, `!join/leave`, `!live`"
